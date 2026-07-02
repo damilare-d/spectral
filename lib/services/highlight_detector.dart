@@ -227,7 +227,7 @@ class HighlightDetector {
       start += _strideMs;
     }
 
-    // Non-maximum suppression: drop overlapping segments, keep higher scorer
+    // Non-maximum suppression: drop overlapping windows, keep higher scorer
     segments.sort((a, b) => b.compositeScore.compareTo(a.compositeScore));
     final kept = <VideoSegment>[];
     for (final seg in segments) {
@@ -235,7 +235,47 @@ class HighlightDetector {
           seg.startMs < k.endMs && seg.endMs > k.startMs);
       if (!overlaps) kept.add(seg);
     }
-    return kept;
+
+    // Merge adjacent clips separated by a small gap into longer natural clips.
+    // This turns three consecutive 5-second high-scorers into one 15-second clip.
+    return _mergeAdjacent(kept);
+  }
+
+  /// Merges segments whose gap is <= [gapMs] into a single longer segment.
+  List<VideoSegment> _mergeAdjacent(List<VideoSegment> segments,
+      {int gapMs = 2500}) {
+    if (segments.length <= 1) return segments;
+    final sorted = List<VideoSegment>.from(segments)
+      ..sort((a, b) => a.startMs.compareTo(b.startMs));
+
+    final merged = <VideoSegment>[];
+    var current = sorted.first;
+
+    for (int i = 1; i < sorted.length; i++) {
+      final next = sorted[i];
+      if (next.startMs - current.endMs <= gapMs) {
+        // Extend current to absorb next; average scores, keep peak composite.
+        current = VideoSegment(
+          startMs:     current.startMs,
+          endMs:       next.endMs,
+          energyScore: (current.energyScore + next.energyScore) / 2,
+          onsetScore:  (current.onsetScore  + next.onsetScore)  / 2,
+          sceneScore:  (current.sceneScore  + next.sceneScore)  / 2,
+          speechScore: (current.speechScore + next.speechScore) / 2,
+          faceScore:   current.faceScore > next.faceScore
+              ? current.faceScore
+              : next.faceScore,
+          compositeScore: current.compositeScore > next.compositeScore
+              ? current.compositeScore
+              : next.compositeScore,
+        );
+      } else {
+        merged.add(current);
+        current = next;
+      }
+    }
+    merged.add(current);
+    return merged;
   }
 
   double _windowAvg(List<EnergyWindow> windows, int startMs, int endMs,

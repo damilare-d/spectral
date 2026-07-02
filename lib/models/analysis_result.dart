@@ -13,15 +13,10 @@ class AnalysisResult {
     required this.videoPath,
   });
 
-  List<VideoSegment> get topSegments {
-    final sorted = List<VideoSegment>.from(segments)
-      ..sort((a, b) => b.compositeScore.compareTo(a.compositeScore));
-    return sorted.take(5).toList();
-  }
-
+  /// All segments sorted by time — no cap, editor shows everything.
   List<VideoSegment> get chronological {
-    final top = topSegments;
-    top.sort((a, b) => a.startMs.compareTo(b.startMs));
-    return top;
+    final sorted = List<VideoSegment>.from(segments)
+      ..sort((a, b) => a.startMs.compareTo(b.startMs));
+    return sorted;
   }
 }
