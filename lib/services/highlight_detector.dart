@@ -241,9 +241,19 @@ class HighlightDetector {
     return _mergeAdjacent(kept);
   }
 
-  /// Merges segments whose gap is <= [gapMs] into a single longer segment.
-  List<VideoSegment> _mergeAdjacent(List<VideoSegment> segments,
-      {int gapMs = 2500}) {
+  /// Merges truly adjacent scoring windows into longer natural clips.
+  ///
+  /// [gapMs] — maximum gap between two segments to be considered adjacent.
+  ///   0 means only merge if one ends exactly where the next begins (the
+  ///   stride-based overlap case). Keep this tight — a large value on a
+  ///   feature-length movie chains everything into one clip.
+  ///
+  /// [maxMergeDurationMs] — hard cap so no single merged clip exceeds this.
+  List<VideoSegment> _mergeAdjacent(
+    List<VideoSegment> segments, {
+    int gapMs = 0,
+    int maxMergeDurationMs = 30000, // 30 s max per clip
+  }) {
     if (segments.length <= 1) return segments;
     final sorted = List<VideoSegment>.from(segments)
       ..sort((a, b) => a.startMs.compareTo(b.startMs));
@@ -253,8 +263,11 @@ class HighlightDetector {
 
     for (int i = 1; i < sorted.length; i++) {
       final next = sorted[i];
-      if (next.startMs - current.endMs <= gapMs) {
-        // Extend current to absorb next; average scores, keep peak composite.
+      final gap = next.startMs - current.endMs;
+      final mergedDuration = next.endMs - current.startMs;
+
+      if (gap <= gapMs && mergedDuration <= maxMergeDurationMs) {
+        // Extend current; average signal scores, keep peak composite.
         current = VideoSegment(
           startMs:     current.startMs,
           endMs:       next.endMs,

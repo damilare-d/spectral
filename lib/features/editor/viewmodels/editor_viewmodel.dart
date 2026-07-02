@@ -29,9 +29,14 @@ class EditorViewModel extends ChangeNotifier {
     _result = result;
     _selected.addAll(result.chronological);
 
-    _videoCtrl = VideoPlayerController.contentUri(
-      Uri.file(result.videoPath),
-    )..initialize().then((_) {
+    // File picker on Android may return either a file path or a content:// URI.
+    // Uri.file() breaks on content:// strings — parse generically instead.
+    final videoUri = result.videoPath.startsWith('content://')
+        ? Uri.parse(result.videoPath)
+        : Uri.file(result.videoPath);
+
+    _videoCtrl = VideoPlayerController.contentUri(videoUri)
+      ..initialize().then((_) {
         _videoReady = true;
         _videoCtrl.addListener(_onVideoTick);
         notifyListeners();
