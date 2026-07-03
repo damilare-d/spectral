@@ -18,8 +18,19 @@ class HomeViewModel extends ChangeNotifier {
         final status = await Permission.videos.request();
         if (!status.isGranted) return null;
       }
-      final result = await FilePicker.platform.pickFiles(type: FileType.video);
-      return result?.files.single.path;
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.video,
+        withData: false, // never load file bytes into memory
+      );
+      final file = result?.files.single;
+      if (file == null) return null;
+      // On Android, prefer the content:// URI (identifier) over path.
+      // Using path causes file_picker to copy the entire file to app cache,
+      // which doubles storage use for large movie files before any processing.
+      // ffmpeg_kit and VideoPlayerController both handle content:// URIs natively.
+      return Platform.isAndroid
+          ? (file.identifier ?? file.path)
+          : file.path;
     } finally {
       _isPickingFile = false;
       notifyListeners();

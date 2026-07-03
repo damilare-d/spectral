@@ -309,7 +309,7 @@ class HighlightDetector {
   double _scenePeak(List<({int frameIndex, double diff})> diffs, int startMs, int endMs) {
     final inRange = diffs
         .where((d) {
-          final frameMs = d.frameIndex * 1000; // 1fps → ms
+          final frameMs = d.frameIndex * FfmpegService.frameIntervalMs;
           return frameMs >= startMs && frameMs < endMs;
         })
         .map((d) => d.diff)

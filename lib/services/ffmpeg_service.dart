@@ -16,6 +16,16 @@ class FfmpegService {
     return dir;
   }
 
+  // Cap analysis at 90 minutes. Beyond this, the PCM + frame files become
+  // too large for device memory and storage (a 2-hour BluRay would produce
+  // 460 MB of PCM and 7,200 JPEG frames at 1fps with no cap).
+  static const int _maxAnalysisSecs = 5400; // 90 min
+
+  // One frame extracted per this many seconds. Exposed so HighlightDetector
+  // can convert frameIndex → timestamp correctly.
+  static const int secondsPerFrame = 5;
+  static const int frameIntervalMs = secondsPerFrame * 1000;
+
   /// Extract float32 mono PCM at 16 kHz for Whisper + energy analysis.
   /// Returns the path to a raw .pcm file.
   Future<String> extractAudio(String videoPath) async {
@@ -24,15 +34,16 @@ class FfmpegService {
     if (File(outPath).existsSync()) File(outPath).deleteSync();
 
     final cmd =
-        '-y -i "$videoPath" -ac 1 -ar 16000 -f f32le "$outPath"';
+        '-y -t $_maxAnalysisSecs -i "$videoPath" -ac 1 -ar 16000 -f f32le "$outPath"';
     final session = await _runAsync(cmd);
     await _checkResult(session, 'extractAudio');
     return outPath;
   }
 
-  /// Extract frames at [fps] as JPEG thumbnails (160×90).
+  /// Extract frames at 1 frame per [secondsPerFrame] seconds as JPEG thumbnails (160×90).
+  /// Capped at [_maxAnalysisSecs] to prevent thousands of frames for long videos.
   /// Returns sorted list of frame file paths.
-  Future<List<String>> extractFrames(String videoPath, {int fps = 1}) async {
+  Future<List<String>> extractFrames(String videoPath) async {
     final dir = await _tmpDir;
     final framesDir = Directory(p.join(dir.path, 'frames'));
     if (framesDir.existsSync()) framesDir.deleteSync(recursive: true);
@@ -40,7 +51,8 @@ class FfmpegService {
 
     final pattern = p.join(framesDir.path, 'frame_%05d.jpg');
     final cmd =
-        '-y -i "$videoPath" -vf "fps=$fps,scale=160:90" -q:v 5 "$pattern"';
+        '-y -t $_maxAnalysisSecs -i "$videoPath" '
+        '-vf "fps=1/$secondsPerFrame,scale=160:90" -q:v 5 "$pattern"';
     final session = await _runAsync(cmd);
     await _checkResult(session, 'extractFrames');
 
