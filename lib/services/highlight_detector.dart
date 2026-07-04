@@ -6,9 +6,11 @@ import 'dart:ui' as ui;
 import '../ffi/analyzer_ffi.dart';
 import '../ffi/whisper_ffi.dart';
 import '../models/analysis_result.dart';
+import '../models/content_type.dart';
 import '../models/video_segment.dart';
 import 'face_detection_service.dart';
 import 'ffmpeg_service.dart';
+import 'hook_detector.dart';
 import 'whisper_model_service.dart';
 
 // ── Progress events ───────────────────────────────────────────────────────────
@@ -17,8 +19,8 @@ sealed class AnalysisProgress {}
 
 class AnalysisStage extends AnalysisProgress {
   final String label;
-  final double fraction; // 0–1 within this stage
-  final int stageIndex;  // 0-based
+  final double fraction;
+  final int stageIndex;
   final int totalStages;
   AnalysisStage(this.label, this.fraction, this.stageIndex, this.totalStages);
 }
@@ -33,9 +35,8 @@ class AnalysisError extends AnalysisProgress {
   AnalysisError(this.message);
 }
 
-// ── Isolate entry points (top-level so they are sendable) ────────────────────
+// ── Isolate entry points ──────────────────────────────────────────────────────
 
-/// Runs energy + onset analysis in a background isolate.
 Future<({List<EnergyWindow> windows, List<int> onsetMs})> _energyIsolate(
     String pcmPath) async {
   final bytes = await File(pcmPath).readAsBytes();
@@ -43,9 +44,7 @@ Future<({List<EnergyWindow> windows, List<int> onsetMs})> _energyIsolate(
   return AnalyzerFFI.instance.analyzeAudio(pcmF32);
 }
 
-/// Runs Whisper transcription in a background isolate.
-Future<List<WhisperSegment>> _whisperIsolate(
-    (String, String) args) async {
+Future<List<WhisperSegment>> _whisperIsolate((String, String) args) async {
   final (modelPath, pcmPath) = args;
   final bytes = await File(pcmPath).readAsBytes();
   final pcmF32 = Float32List.view(bytes.buffer);
@@ -70,51 +69,37 @@ class HighlightDetector {
   static const int _segmentMs = 5000;
   static const int _strideMs  = 2500;
 
-  /// Run the full analysis pipeline, emitting [AnalysisProgress] events.
-  ///
-  /// [runSpeech]: when false, the Whisper stage is skipped entirely.
-  /// Set to false for screen recordings or videos known to have no speech —
-  /// Whisper on mobile CPU takes 3–10× real-time and can't be cancelled.
   Stream<AnalysisProgress> analyze(
     String videoPath, {
     bool runSpeech = false,
+    ContentType? contentTypeOverride,
   }) async* {
     final total = runSpeech ? 5 : 4;
 
     try {
-      // ── Stage 1: extract audio ────────────────────────────────────────────
       yield AnalysisStage('Extracting audio…', 0.0, 0, total);
       final pcmPath = await _ffmpeg.extractAudio(videoPath);
       yield AnalysisStage('Extracting audio…', 1.0, 0, total);
 
-      // ── Stage 2: energy + onset (background isolate) ──────────────────────
       yield AnalysisStage('Analysing audio energy…', 0.0, 1, total);
       final audioResult = await Isolate.run(() => _energyIsolate(pcmPath));
       yield AnalysisStage('Analysing audio energy…', 1.0, 1, total);
 
-      // ── Stage 3: Whisper transcription (optional) ─────────────────────────
       List<WhisperSegment> whisperSegs = [];
       if (runSpeech) {
         yield AnalysisStage('Transcribing speech…', 0.0, 2, total);
-        final modelPath = await _modelSvc.ensureModel(
-          onProgress: (p) {}, // model download handled in AnalysisViewModel
-        );
+        final modelPath = await _modelSvc.ensureModel(onProgress: (p) {});
         whisperSegs = await Isolate.run(
-          () => _whisperIsolate((modelPath, pcmPath)),
-        );
+            () => _whisperIsolate((modelPath, pcmPath)));
         yield AnalysisStage('Transcribing speech…', 1.0, 2, total);
       }
 
-      // ── Stage 4: scene detection ──────────────────────────────────────────
       final sceneStage = runSpeech ? 3 : 2;
       yield AnalysisStage('Detecting scene changes…', 0.0, sceneStage, total);
       final framePaths = await _ffmpeg.extractFrames(videoPath);
       final sceneDiffs = await _computeSceneDiffs(framePaths);
       yield AnalysisStage('Detecting scene changes…', 1.0, sceneStage, total);
 
-      // ── Stage 5: face detection ───────────────────────────────────────────
-      // FaceDetectionService is created fresh each run because close() makes
-      // the ML Kit detector permanently unusable.
       final faceStage = runSpeech ? 4 : 3;
       yield AnalysisStage('Detecting faces…', 0.0, faceStage, total);
       final faceSvc = FaceDetectionService();
@@ -122,34 +107,38 @@ class HighlightDetector {
       await faceSvc.close();
       yield AnalysisStage('Detecting faces…', 1.0, faceStage, total);
 
-      // ── Score segments ────────────────────────────────────────────────────
-      final pcmLength = await File(pcmPath)
-          .length()
-          .then((bytes) => bytes ~/ 4); // float32 → sample count
+      final pcmLength =
+          await File(pcmPath).length().then((bytes) => bytes ~/ 4);
       final videoDurationMs = _estimateDuration(pcmLength);
-      final segments = _buildSegments(
-        videoDurationMs:   videoDurationMs,
-        energyWindows:     audioResult.windows,
-        onsetMs:           audioResult.onsetMs,
-        whisperSegs:       whisperSegs,
-        sceneDiffs:        sceneDiffs,
-        faceScores:        faceScores,
-        framePaths:        framePaths,
+
+      final (:segments, :contentType) = _buildSegments(
+        videoDurationMs:    videoDurationMs,
+        energyWindows:      audioResult.windows,
+        onsetMs:            audioResult.onsetMs,
+        whisperSegs:        whisperSegs,
+        sceneDiffs:         sceneDiffs,
+        faceScores:         faceScores,
+        framePaths:         framePaths,
+        contentTypeOverride: contentTypeOverride,
       );
 
       final transcript = whisperSegs.map((s) => s.text).join(' ');
+      final topQuotes  = HookDetector.extractQuotes(whisperSegs);
+
       yield AnalysisComplete(AnalysisResult(
-        segments:        segments,
-        transcript:      transcript,
+        segments:       segments,
+        transcript:     transcript,
         videoDurationMs: videoDurationMs,
-        videoPath:       videoPath,
+        videoPath:      videoPath,
+        contentType:    contentType,
+        topQuotes:      topQuotes,
       ));
     } catch (e, st) {
       yield AnalysisError('$e\n$st');
     }
   }
 
-  // ── Scene diff using native FFI ───────────────────────────────────────────
+  // ── Scene diff ────────────────────────────────────────────────────────────
 
   Future<List<({int frameIndex, double diff})>> _computeSceneDiffs(
       List<String> framePaths) async {
@@ -163,7 +152,8 @@ class HighlightDetector {
       const w = 160, h = 90;
 
       if (prevRgba != null) {
-        final score = AnalyzerFFI.instance.frameDifference(prevRgba, rgba, prevW, prevH);
+        final score =
+            AnalyzerFFI.instance.frameDifference(prevRgba, rgba, prevW, prevH);
         diffs.add((frameIndex: i, diff: score));
       }
       prevRgba = rgba;
@@ -177,12 +167,10 @@ class HighlightDetector {
     try {
       final bytes = await File(path).readAsBytes();
       final codec = await ui.instantiateImageCodec(
-        bytes,
-        targetWidth: 160,
-        targetHeight: 90,
-      );
+          bytes, targetWidth: 160, targetHeight: 90);
       final frame = await codec.getNextFrame();
-      final data = await frame.image.toByteData(format: ui.ImageByteFormat.rawRgba);
+      final data =
+          await frame.image.toByteData(format: ui.ImageByteFormat.rawRgba);
       frame.image.dispose();
       return data?.buffer.asUint8List();
     } catch (_) {
@@ -192,7 +180,13 @@ class HighlightDetector {
 
   // ── Segment scoring ───────────────────────────────────────────────────────
 
-  List<VideoSegment> _buildSegments({
+  /// Build, classify, score, NMS, and merge all candidate segments.
+  ///
+  /// Three-phase design:
+  ///   1. Compute raw per-signal scores for every window.
+  ///   2. Aggregate signals → classify content type (or use [contentTypeOverride]).
+  ///   3. Set hookScore per window and recompute composite with type weights.
+  ({List<VideoSegment> segments, ContentType contentType}) _buildSegments({
     required int videoDurationMs,
     required List<EnergyWindow> energyWindows,
     required List<int> onsetMs,
@@ -200,59 +194,95 @@ class HighlightDetector {
     required List<({int frameIndex, double diff})> sceneDiffs,
     required List<double> faceScores,
     required List<String> framePaths,
+    ContentType? contentTypeOverride,
   }) {
+    // ── Phase 1: raw signal scores, no composite yet ──────────────────────
     final segments = <VideoSegment>[];
     int start = 0;
     while (start < videoDurationMs) {
       final end = (start + _segmentMs).clamp(0, videoDurationMs);
-
-      final energy = _windowAvg(energyWindows, start, end, (w) => w.energy);
-      final onset  = _onsetDensity(onsetMs, start, end);
-      final scene  = _scenePeak(sceneDiffs, start, end);
-      final speech = _speechScore(whisperSegs, start, end);
-      final face   = _faceWindowScore(faceScores, framePaths.length, videoDurationMs, start, end);
-
-      final seg = VideoSegment(
-        startMs:      start,
-        endMs:        end,
-        energyScore:  energy,
-        onsetScore:   onset,
-        sceneScore:   scene,
-        speechScore:  speech,
-        faceScore:    face,
-      )..recomputeComposite();
-
-      segments.add(seg);
+      segments.add(VideoSegment(
+        startMs:     start,
+        endMs:       end,
+        energyScore: _windowAvg(energyWindows, start, end, (w) => w.energy),
+        onsetScore:  _onsetDensity(onsetMs, start, end),
+        sceneScore:  _scenePeak(sceneDiffs, start, end),
+        speechScore: _speechPresence(whisperSegs, start, end),
+        faceScore:   _faceWindowScore(
+            faceScores, framePaths.length, videoDurationMs, start, end),
+      ));
       if (end >= videoDurationMs) break;
       start += _strideMs;
     }
 
-    // Non-maximum suppression: drop overlapping windows, keep higher scorer
+    // ── Phase 2: classify content type ───────────────────────────────────
+    final contentType =
+        contentTypeOverride ?? _classifyContent(segments);
+    final weights = ScoringWeights.presets[contentType]!;
+
+    // ── Phase 3: hook score + composite with type-appropriate weights ─────
+    for (final seg in segments) {
+      seg.hookScore = HookDetector.windowHookScore(
+          whisperSegs, seg.startMs, seg.endMs);
+      seg.recomputeCompositeFromWeights(weights);
+    }
+
+    // ── NMS: keep highest-scoring non-overlapping windows ─────────────────
     segments.sort((a, b) => b.compositeScore.compareTo(a.compositeScore));
     final kept = <VideoSegment>[];
     for (final seg in segments) {
-      final overlaps = kept.any((k) =>
-          seg.startMs < k.endMs && seg.endMs > k.startMs);
+      final overlaps =
+          kept.any((k) => seg.startMs < k.endMs && seg.endMs > k.startMs);
       if (!overlaps) kept.add(seg);
     }
 
-    // Merge adjacent clips separated by a small gap into longer natural clips.
-    // This turns three consecutive 5-second high-scorers into one 15-second clip.
-    return _mergeAdjacent(kept);
+    return (segments: _mergeAdjacent(kept), contentType: contentType);
   }
 
-  /// Merges truly adjacent scoring windows into longer natural clips.
-  ///
-  /// [gapMs] — maximum gap between two segments to be considered adjacent.
-  ///   0 means only merge if one ends exactly where the next begins (the
-  ///   stride-based overlap case). Keep this tight — a large value on a
-  ///   feature-length movie chains everything into one clip.
-  ///
-  /// [maxMergeDurationMs] — hard cap so no single merged clip exceeds this.
+  // ── Content-type classifier ───────────────────────────────────────────────
+
+  ContentType _classifyContent(List<VideoSegment> segs) {
+    if (segs.isEmpty) return ContentType.general;
+    final n = segs.length.toDouble();
+
+    double avgE = 0, avgO = 0, avgSc = 0, avgSp = 0, avgF = 0;
+    for (final s in segs) {
+      avgE  += s.energyScore;
+      avgO  += s.onsetScore;
+      avgSc += s.sceneScore;
+      avgSp += s.speechScore;
+      avgF  += s.faceScore;
+    }
+    avgE /= n; avgO /= n; avgSc /= n; avgSp /= n; avgF /= n;
+
+    // Music/Concert: very high beat density
+    if (avgO > 0.45 && avgE > 0.28) return ContentType.music;
+
+    // Sports: high energy + beats + moderate scene changes
+    if (avgE > 0.35 && avgO > 0.30 && avgSc > 0.18) return ContentType.sports;
+
+    // Action/Movie: high scene changes + high energy
+    if (avgSc > 0.28 && avgE > 0.32) return ContentType.action;
+
+    // Podcast/Interview: high speech + face + low scene + low energy
+    if (avgSp > 0.30 && avgF > 0.22 && avgSc < 0.20 && avgE < 0.28) {
+      return ContentType.podcast;
+    }
+
+    // Tutorial/Talk: moderate speech, low visual activity
+    if (avgSp > 0.25 && avgSc < 0.20 && avgE < 0.28) {
+      return ContentType.tutorial;
+    }
+
+    return ContentType.general;
+  }
+
+  // ── Merge adjacent ────────────────────────────────────────────────────────
+
   List<VideoSegment> _mergeAdjacent(
     List<VideoSegment> segments, {
     int gapMs = 0,
-    int maxMergeDurationMs = 30000, // 30 s max per clip
+    int maxMergeDurationMs = 30000,
   }) {
     if (segments.length <= 1) return segments;
     final sorted = List<VideoSegment>.from(segments)
@@ -267,7 +297,6 @@ class HighlightDetector {
       final mergedDuration = next.endMs - current.startMs;
 
       if (gap <= gapMs && mergedDuration <= maxMergeDurationMs) {
-        // Extend current; average signal scores, keep peak composite.
         current = VideoSegment(
           startMs:     current.startMs,
           endMs:       next.endMs,
@@ -276,11 +305,11 @@ class HighlightDetector {
           sceneScore:  (current.sceneScore  + next.sceneScore)  / 2,
           speechScore: (current.speechScore + next.speechScore) / 2,
           faceScore:   current.faceScore > next.faceScore
-              ? current.faceScore
-              : next.faceScore,
+              ? current.faceScore : next.faceScore,
+          hookScore:   current.hookScore > next.hookScore
+              ? current.hookScore : next.hookScore,
           compositeScore: current.compositeScore > next.compositeScore
-              ? current.compositeScore
-              : next.compositeScore,
+              ? current.compositeScore : next.compositeScore,
         );
       } else {
         merged.add(current);
@@ -290,6 +319,8 @@ class HighlightDetector {
     merged.add(current);
     return merged;
   }
+
+  // ── Signal helpers ────────────────────────────────────────────────────────
 
   double _windowAvg(List<EnergyWindow> windows, int startMs, int endMs,
       double Function(EnergyWindow) value) {
@@ -302,15 +333,16 @@ class HighlightDetector {
 
   double _onsetDensity(List<int> onsetMs, int startMs, int endMs) {
     final count = onsetMs.where((t) => t >= startMs && t < endMs).length;
-    final maxPerWindow = _segmentMs / 250; // one onset per hop
+    final maxPerWindow = _segmentMs / 250;
     return (count / maxPerWindow).clamp(0.0, 1.0);
   }
 
-  double _scenePeak(List<({int frameIndex, double diff})> diffs, int startMs, int endMs) {
+  double _scenePeak(
+      List<({int frameIndex, double diff})> diffs, int startMs, int endMs) {
     final inRange = diffs
         .where((d) {
-          final frameMs = d.frameIndex * FfmpegService.frameIntervalMs;
-          return frameMs >= startMs && frameMs < endMs;
+          final ms = d.frameIndex * FfmpegService.frameIntervalMs;
+          return ms >= startMs && ms < endMs;
         })
         .map((d) => d.diff)
         .toList();
@@ -318,19 +350,26 @@ class HighlightDetector {
     return inRange.reduce((a, b) => a > b ? a : b);
   }
 
-  double _speechScore(List<WhisperSegment> segs, int startMs, int endMs) {
-    final inRange = segs.where((s) => s.t0Ms < endMs && s.t1Ms > startMs).toList();
+  /// Raw speech presence score: confidence × density.
+  /// Hook quality is applied separately in Phase 3.
+  double _speechPresence(List<WhisperSegment> segs, int startMs, int endMs) {
+    final inRange =
+        segs.where((s) => s.t0Ms < endMs && s.t1Ms > startMs).toList();
     if (inRange.isEmpty) return 0.0;
-    final avgProb = inRange.map((s) => s.prob).reduce((a, b) => a + b) / inRange.length;
+    final avgProb =
+        inRange.map((s) => s.prob).reduce((a, b) => a + b) / inRange.length;
     final density = (inRange.length / 10.0).clamp(0.0, 1.0);
     return (avgProb * 0.6 + density * 0.4).clamp(0.0, 1.0);
   }
 
   double _faceWindowScore(List<double> faceScores, int totalFrames,
       int videoDurationMs, int startMs, int endMs) {
-    if (faceScores.isEmpty || totalFrames == 0 || videoDurationMs == 0) return 0.0;
+    if (faceScores.isEmpty || totalFrames == 0 || videoDurationMs == 0) {
+      return 0.0;
+    }
     final startFrame = (startMs * totalFrames / videoDurationMs).floor();
-    final endFrame   = (endMs   * totalFrames / videoDurationMs).ceil().clamp(0, totalFrames);
+    final endFrame =
+        (endMs * totalFrames / videoDurationMs).ceil().clamp(0, totalFrames);
     if (startFrame >= endFrame) return 0.0;
     final slice = faceScores.sublist(startFrame, endFrame);
     return slice.reduce((a, b) => a > b ? a : b);
