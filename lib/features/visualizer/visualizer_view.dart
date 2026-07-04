@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
-import '../../../ui/visualizer_painter.dart';
-import '../viewmodels/visualizer_viewmodel.dart';
+import '../../ui/visualizer_painter.dart';
+import 'visualizer_viewmodel.dart';
 
 /// The View owns only the Ticker (a UI/animation concern).
 /// All state and logic live in [VisualizerViewModel].
@@ -51,7 +51,7 @@ class _VisualizerViewState extends State<VisualizerView>
           );
         }
 
-        final shader  = _vm.shader;
+        final shader = _vm.shader;
         final texture = _vm.fftTexture;
 
         if (shader == null || texture == null) {

@@ -4,7 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:permission_handler/permission_handler.dart';
 
-import '../../../ffi/spectral_ffi.dart';
+import '../../ffi/spectral_ffi.dart';
 
 class VisualizerViewModel extends ChangeNotifier {
   static const int _fftSize = 1024;
@@ -51,22 +51,18 @@ class VisualizerViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Called from the View's Ticker on every vsync frame.
   void onTick(Duration elapsed) {
     _time = elapsed.inMilliseconds / 1000.0;
     if (_running && !_updating) {
       _updating = true;
       _fetchAndUpdate().whenComplete(() => _updating = false);
     }
-    // Always notify so uTime animates the shader even without new FFT data.
     notifyListeners();
   }
 
   Future<void> _fetchAndUpdate() async {
     final magnitudes = SpectralFFI.instance.getMagnitudes(_fftBins);
     final newTexture = await _buildTexture(magnitudes);
-    // Guard: VM may have been disposed while we were awaiting the texture build.
-    // Disposing twice crashes with an assertion error in dart:ui/painting.dart.
     if (_disposed) {
       newTexture.dispose();
       return;
@@ -82,7 +78,7 @@ class VisualizerViewModel extends ChangeNotifier {
     final pixels = Uint8List(n * 4);
     for (int i = 0; i < n; i++) {
       final v = (magnitudes[i] * 255).clamp(0, 255).toInt();
-      pixels[i * 4]     = v;
+      pixels[i * 4] = v;
       pixels[i * 4 + 1] = v;
       pixels[i * 4 + 2] = v;
       pixels[i * 4 + 3] = 255;
@@ -94,8 +90,8 @@ class VisualizerViewModel extends ChangeNotifier {
       height: 1,
       pixelFormat: ui.PixelFormat.rgba8888,
     );
-    final codec = await descriptor.instantiateCodec(
-        targetWidth: n, targetHeight: 1);
+    final codec =
+        await descriptor.instantiateCodec(targetWidth: n, targetHeight: 1);
     final frame = await codec.getNextFrame();
     return frame.image;
   }

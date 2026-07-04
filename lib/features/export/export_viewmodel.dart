@@ -3,8 +3,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../../../models/video_segment.dart';
-import '../../../services/ffmpeg_service.dart';
+import '../../models/video_segment.dart';
+import '../../services/ffmpeg_service.dart';
 
 class ExportViewModel extends ChangeNotifier {
   final FfmpegService _ffmpeg;

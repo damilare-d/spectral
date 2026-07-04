@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/locator.dart';
-import '../../../models/video_segment.dart';
-import '../../../services/ffmpeg_service.dart';
-import '../viewmodels/export_viewmodel.dart';
+import '../../core/locator.dart';
+import '../../models/video_segment.dart';
+import '../../services/ffmpeg_service.dart';
+import 'export_viewmodel.dart';
 
 class ExportView extends StatefulWidget {
   final String videoPath;
@@ -121,8 +121,8 @@ class _ExportViewState extends State<ExportView> {
         const SizedBox(height: 12),
         TextButton(
           onPressed: () => context.go('/'),
-          child:
-              const Text('Back to home', style: TextStyle(color: Colors.white38)),
+          child: const Text('Back to home',
+              style: TextStyle(color: Colors.white38)),
         ),
       ],
     );

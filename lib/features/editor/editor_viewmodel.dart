@@ -1,8 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:video_player/video_player.dart';
 
-import '../../../models/analysis_result.dart';
-import '../../../models/video_segment.dart';
+import '../../models/analysis_result.dart';
+import '../../models/content_type.dart';
+import '../../models/quote.dart';
+import '../../models/video_segment.dart';
 
 class EditorViewModel extends ChangeNotifier {
   late final AnalysisResult _result;
@@ -11,6 +13,7 @@ class EditorViewModel extends ChangeNotifier {
   final List<VideoSegment> _selected = [];
   bool _videoReady = false;
   VideoSegment? _activeSegment;
+  String? _activeFilter; // null=all, ''=untagged, 'Action'=that tag
 
   bool get videoReady => _videoReady;
   List<VideoSegment> get selected => List.unmodifiable(_selected);
@@ -24,6 +27,45 @@ class EditorViewModel extends ChangeNotifier {
   bool get isPlaying => _videoReady && _videoCtrl.value.isPlaying;
   int get positionMs =>
       _videoReady ? _videoCtrl.value.position.inMilliseconds : 0;
+
+  String? get activeFilter => _activeFilter;
+
+  ContentType get contentType => _result.contentType;
+  List<Quote> get topQuotes => _result.topQuotes;
+
+  /// Seek to an arbitrary position without changing the active segment.
+  void seekToPosition(int ms) {
+    _videoCtrl.seekTo(Duration(milliseconds: ms));
+    notifyListeners();
+  }
+
+  Set<String> get allTags {
+    final tags = <String>{};
+    for (final s in _selected) {
+      if (s.tag != null && s.tag!.isNotEmpty) tags.add(s.tag!);
+    }
+    return tags;
+  }
+
+  List<VideoSegment> get filtered {
+    if (_activeFilter == null) return List.unmodifiable(_selected);
+    if (_activeFilter!.isEmpty) {
+      return List.unmodifiable(
+          _selected.where((s) => s.tag == null || s.tag!.isEmpty).toList());
+    }
+    return List.unmodifiable(
+        _selected.where((s) => s.tag == _activeFilter).toList());
+  }
+
+  void setTag(VideoSegment seg, String? newTag) {
+    seg.tag = newTag;
+    notifyListeners();
+  }
+
+  void setFilter(String? filter) {
+    _activeFilter = filter;
+    notifyListeners();
+  }
 
   void init(AnalysisResult result) {
     _result = result;
@@ -43,7 +85,6 @@ class EditorViewModel extends ChangeNotifier {
       });
   }
 
-  // Called by VideoPlayerController on every frame tick.
   void _onVideoTick() {
     final seg = _activeSegment;
     if (seg != null && _videoCtrl.value.isPlaying) {
@@ -53,7 +94,7 @@ class EditorViewModel extends ChangeNotifier {
         _videoCtrl.seekTo(Duration(milliseconds: seg.startMs));
       }
     }
-    notifyListeners(); // drives scrub bar and time display on every frame
+    notifyListeners();
   }
 
   void seekTo(VideoSegment seg) {
@@ -71,7 +112,6 @@ class EditorViewModel extends ChangeNotifier {
       final seg = _activeSegment;
       if (seg != null) {
         final posMs = _videoCtrl.value.position.inMilliseconds;
-        // Rewind if playhead is at or past the segment end.
         if (posMs >= seg.endMs || posMs < seg.startMs) {
           _videoCtrl.seekTo(Duration(milliseconds: seg.startMs));
         }
@@ -81,7 +121,6 @@ class EditorViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Seek to a fractional position within the active segment (0.0–1.0).
   void seekWithinActive(double fraction) {
     final seg = _activeSegment;
     if (seg == null) return;

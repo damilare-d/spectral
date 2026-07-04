@@ -4,10 +4,12 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/locator.dart';
-import '../../../services/highlight_detector.dart';
-import '../../../services/whisper_model_service.dart';
-import '../viewmodels/analysis_viewmodel.dart';
+import '../../core/locator.dart';
+import '../../models/content_type.dart';
+import '../../services/highlight_detector.dart';
+import '../../services/whisper_model_service.dart';
+import 'analysis_viewmodel.dart';
+import 'widgets/option_row.dart';
 
 class AnalysisView extends StatefulWidget {
   final String videoPath;
@@ -23,7 +25,8 @@ class _AnalysisViewState extends State<AnalysisView> {
   Duration _elapsed = Duration.zero;
 
   bool _started = false;
-  bool _runSpeech = false; // off by default — user opts in
+  bool _runSpeech = false;
+  ContentType? _contentTypeOverride; // null = auto-detect
 
   @override
   void initState() {
@@ -40,7 +43,11 @@ class _AnalysisViewState extends State<AnalysisView> {
     _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() => _elapsed += const Duration(seconds: 1));
     });
-    _vm.startAnalysis(widget.videoPath, runSpeech: _runSpeech);
+    _vm.startAnalysis(
+      widget.videoPath,
+      runSpeech: _runSpeech,
+      contentTypeOverride: _contentTypeOverride,
+    );
   }
 
   void _onVmChanged() {
@@ -80,14 +87,13 @@ class _AnalysisViewState extends State<AnalysisView> {
     );
   }
 
-  // ── Config card ─────────────────────────────────────────────────────────────
-
   Widget _buildConfig() {
     final filename = File(widget.videoPath).uri.pathSegments.last;
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: 32),
         const Icon(Icons.movie_outlined,
             color: Colors.deepPurpleAccent, size: 48),
         const SizedBox(height: 20),
@@ -99,8 +105,6 @@ class _AnalysisViewState extends State<AnalysisView> {
           overflow: TextOverflow.ellipsis,
         ),
         const SizedBox(height: 32),
-
-        // Options card
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
@@ -116,21 +120,21 @@ class _AnalysisViewState extends State<AnalysisView> {
                       fontSize: 14,
                       fontWeight: FontWeight.w600)),
               const SizedBox(height: 12),
-              _OptionRow(
+              OptionRow(
                 icon: Icons.graphic_eq,
                 label: 'Audio energy & beats',
                 sublabel: 'Always included — fast',
                 value: true,
-                onChanged: null, // always on
+                onChanged: null,
               ),
-              _OptionRow(
+              OptionRow(
                 icon: Icons.camera_alt,
                 label: 'Scene changes',
                 sublabel: 'Always included — fast',
                 value: true,
                 onChanged: null,
               ),
-              _OptionRow(
+              OptionRow(
                 icon: Icons.face,
                 label: 'Face & expression detection',
                 sublabel: 'Always included — fast',
@@ -138,7 +142,7 @@ class _AnalysisViewState extends State<AnalysisView> {
                 onChanged: null,
               ),
               const Divider(color: Colors.white12, height: 24),
-              _OptionRow(
+              OptionRow(
                 icon: Icons.mic,
                 label: 'Speech recognition (Whisper)',
                 sublabel: _runSpeech
@@ -151,7 +155,50 @@ class _AnalysisViewState extends State<AnalysisView> {
             ],
           ),
         ),
-
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A2E),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Content type',
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600)),
+              const SizedBox(height: 4),
+              const Text(
+                'Auto-detect picks the best scoring weights for your video.',
+                style: TextStyle(color: Colors.white38, fontSize: 11),
+              ),
+              const SizedBox(height: 12),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _TypeChip(
+                      label: 'Auto',
+                      selected: _contentTypeOverride == null,
+                      onTap: () =>
+                          setState(() => _contentTypeOverride = null),
+                    ),
+                    for (final ct in ContentType.values)
+                      _TypeChip(
+                        label: '${ct.icon} ${ct.label.split(' ').first}',
+                        selected: _contentTypeOverride == ct,
+                        onTap: () =>
+                            setState(() => _contentTypeOverride = ct),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
         const SizedBox(height: 32),
         ElevatedButton(
           onPressed: _startAnalysis,
@@ -164,15 +211,14 @@ class _AnalysisViewState extends State<AnalysisView> {
           child: const Text('Start Analysis',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
         ),
+        const SizedBox(height: 32),
       ],
-    );
+    ),
+  );
   }
-
-  // ── Progress ─────────────────────────────────────────────────────────────────
 
   Widget _buildProgress() {
     final stageHint = _stageHint(_vm.stageIndex, _vm.stageName);
-
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -212,7 +258,8 @@ class _AnalysisViewState extends State<AnalysisView> {
         if (stageHint != null) ...[
           const SizedBox(height: 20),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
               color: Colors.white.withAlpha(10),
               borderRadius: BorderRadius.circular(8),
@@ -263,62 +310,42 @@ class _AnalysisViewState extends State<AnalysisView> {
   }
 }
 
-// ── Option row widget ─────────────────────────────────────────────────────────
-
-class _OptionRow extends StatelessWidget {
-  final IconData icon;
+class _TypeChip extends StatelessWidget {
   final String label;
-  final String sublabel;
-  final bool value;
-  final void Function(bool)? onChanged;
-  final bool warningColor;
+  final bool selected;
+  final VoidCallback onTap;
 
-  const _OptionRow({
-    required this.icon,
+  const _TypeChip({
     required this.label,
-    required this.sublabel,
-    required this.value,
-    required this.onChanged,
-    this.warningColor = false,
+    required this.selected,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final enabled = onChanged != null;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        children: [
-          Icon(icon,
-              size: 18,
-              color: enabled
-                  ? (warningColor ? Colors.amber : Colors.deepPurpleAccent)
-                  : Colors.white24),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label,
-                    style: TextStyle(
-                        color: enabled ? Colors.white : Colors.white38,
-                        fontSize: 13)),
-                Text(sublabel,
-                    style: TextStyle(
-                        color: warningColor
-                            ? Colors.amber.withAlpha(180)
-                            : Colors.white24,
-                        fontSize: 10)),
-              ],
+      padding: const EdgeInsets.only(right: 8),
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: selected ? Colors.deepPurple : Colors.white10,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: selected ? Colors.deepPurpleAccent : Colors.transparent,
             ),
           ),
-          Switch(
-            value: value,
-            onChanged: onChanged,
-            activeThumbColor: Colors.deepPurpleAccent,
-            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          child: Text(
+            label,
+            style: TextStyle(
+              color: selected ? Colors.white : Colors.white54,
+              fontSize: 12,
+              fontWeight:
+                  selected ? FontWeight.w600 : FontWeight.normal,
+            ),
           ),
-        ],
+        ),
       ),
     );
   }

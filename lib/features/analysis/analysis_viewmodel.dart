@@ -1,8 +1,9 @@
 import 'package:flutter/foundation.dart';
 
-import '../../../models/analysis_result.dart';
-import '../../../services/highlight_detector.dart';
-import '../../../services/whisper_model_service.dart';
+import '../../models/analysis_result.dart';
+import '../../models/content_type.dart';
+import '../../services/highlight_detector.dart';
+import '../../services/whisper_model_service.dart';
 
 class AnalysisViewModel extends ChangeNotifier {
   final HighlightDetector _detector;
@@ -30,12 +31,13 @@ class AnalysisViewModel extends ChangeNotifier {
   bool get isDownloading => _isDownloading;
   double get downloadProgress => _downloadProgress;
   String? get error => _error;
-
-  /// Non-null once the pipeline completes. Views watch this to trigger navigation.
   AnalysisResult? get result => _result;
 
-  Future<void> startAnalysis(String videoPath, {bool runSpeech = false}) async {
-    // Only download the model when speech analysis is actually requested.
+  Future<void> startAnalysis(
+    String videoPath, {
+    bool runSpeech = false,
+    ContentType? contentTypeOverride,
+  }) async {
     if (runSpeech) {
       final modelReady = await _modelSvc.isDownloaded;
       if (!modelReady) {
@@ -57,7 +59,11 @@ class AnalysisViewModel extends ChangeNotifier {
       }
     }
 
-    _detector.analyze(videoPath, runSpeech: runSpeech).listen(
+    _detector
+        .analyze(videoPath,
+            runSpeech: runSpeech,
+            contentTypeOverride: contentTypeOverride)
+        .listen(
       (event) {
         switch (event) {
           case AnalysisStage():
@@ -66,7 +72,7 @@ class AnalysisViewModel extends ChangeNotifier {
             _stageIndex = event.stageIndex;
             _totalStages = event.totalStages;
           case AnalysisComplete():
-            _result = event.result; // View listener triggers navigation
+            _result = event.result;
           case AnalysisError():
             _error = event.message;
         }
