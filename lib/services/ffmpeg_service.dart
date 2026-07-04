@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:ffmpeg_kit_flutter_new/ffmpeg_kit.dart';
+import 'package:ffmpeg_kit_flutter_new/ffmpeg_kit_config.dart';
 import 'package:ffmpeg_kit_flutter_new/ffmpeg_session.dart';
 import 'package:ffmpeg_kit_flutter_new/return_code.dart';
 import 'package:path/path.dart' as p;
@@ -33,8 +34,9 @@ class FfmpegService {
     final outPath = p.join(dir.path, 'audio_16k.pcm');
     if (File(outPath).existsSync()) File(outPath).deleteSync();
 
+    final input = await _toFfmpegInput(videoPath);
     final cmd =
-        '-y -t $_maxAnalysisSecs -i "$videoPath" -ac 1 -ar 16000 -f f32le "$outPath"';
+        '-y -t $_maxAnalysisSecs -i "$input" -ac 1 -ar 16000 -f f32le "$outPath"';
     final session = await _runAsync(cmd);
     await _checkResult(session, 'extractAudio');
     return outPath;
@@ -49,9 +51,10 @@ class FfmpegService {
     if (framesDir.existsSync()) framesDir.deleteSync(recursive: true);
     framesDir.createSync();
 
+    final input = await _toFfmpegInput(videoPath);
     final pattern = p.join(framesDir.path, 'frame_%05d.jpg');
     final cmd =
-        '-y -t $_maxAnalysisSecs -i "$videoPath" '
+        '-y -t $_maxAnalysisSecs -i "$input" '
         '-vf "fps=1/$secondsPerFrame,scale=160:90" -q:v 5 "$pattern"';
     final session = await _runAsync(cmd);
     await _checkResult(session, 'extractFrames');
@@ -78,7 +81,8 @@ class FfmpegService {
     final outPath = p.join(dir.path, 'highlight_export.mp4');
     if (File(outPath).existsSync()) File(outPath).deleteSync();
 
-    final sb = StringBuffer('-y -i "$videoPath" -filter_complex "');
+    final input = await _toFfmpegInput(videoPath);
+    final sb = StringBuffer('-y -i "$input" -filter_complex "');
     for (int i = 0; i < segments.length; i++) {
       final s = segments[i];
       final startS = s.startMs / 1000.0;
@@ -105,6 +109,17 @@ class FfmpegService {
     final dest = p.join(downloads.path, fileName);
     await File(srcPath).copy(dest);
     return dest;
+  }
+
+  /// Converts a raw path or content:// URI into a form FFmpeg can open.
+  /// On Android, content:// URIs must go through the SAF pipe API —
+  /// passing them directly gives "application context is not set".
+  Future<String> _toFfmpegInput(String path) async {
+    if (Platform.isAndroid && path.startsWith('content://')) {
+      final saf = await FFmpegKitConfig.getSafParameterForRead(path);
+      if (saf != null) return saf;
+    }
+    return path;
   }
 
   /// Wraps [executeAsync] in a Future so callers can simply await the result.
