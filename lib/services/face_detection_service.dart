@@ -1,21 +1,30 @@
+import 'dart:io';
+
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 
 class FaceDetectionService {
-  final _detector = FaceDetector(
-    options: FaceDetectorOptions(
-      enableClassification: true, // gets smilingProbability
-      enableLandmarks: false,
-      enableContours: false,
-      performanceMode: FaceDetectorMode.fast,
-    ),
-  );
+  // ML Kit is Android/iOS only — null on Windows/desktop.
+  final FaceDetector? _detector = Platform.isWindows
+      ? null
+      : FaceDetector(
+          options: FaceDetectorOptions(
+            enableClassification: true,
+            enableLandmarks: false,
+            enableContours: false,
+            performanceMode: FaceDetectorMode.fast,
+          ),
+        );
 
   bool _closed = false;
 
   /// Score each frame file. Returns a parallel list of face scores in [0, 1].
   /// Score = max(smilingProbability) across detected faces, or 0.3 if a face
   /// is present but smiling probability is unavailable, or 0 if no face.
+  ///
+  /// On Windows, returns 0.0 for every frame (ML Kit unavailable on desktop).
   Future<List<double>> scoreFrames(List<String> framePaths) async {
+    if (_detector == null) return List.filled(framePaths.length, 0.0);
+
     final scores = <double>[];
     for (final path in framePaths) {
       if (_closed) break;
@@ -41,6 +50,6 @@ class FaceDetectionService {
 
   Future<void> close() async {
     _closed = true;
-    await _detector.close();
+    await _detector?.close();
   }
 }
