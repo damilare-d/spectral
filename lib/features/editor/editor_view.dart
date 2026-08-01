@@ -48,8 +48,8 @@ class _EditorViewState extends State<EditorView> {
       );
       return;
     }
-    context.push('/export', extra: (
-      videoPath: _vm.videoPath,
+    context.push('/render', extra: (
+      result: _vm.result,
       segments: List<VideoSegment>.from(toExport),
     ));
   }
@@ -195,7 +195,7 @@ class _EditorViewState extends State<EditorView> {
                   onPressed: _vm.selected.isEmpty ? null : _export,
                   icon: const Icon(Icons.movie_creation,
                       color: Colors.deepPurpleAccent),
-                  label: const Text('Export',
+                  label: const Text('Render',
                       style: TextStyle(color: Colors.deepPurpleAccent)),
                 ),
               ],
@@ -208,20 +208,63 @@ class _EditorViewState extends State<EditorView> {
         builder: (context, _) => Column(
           children: [
             // ── Video preview ───────────────────────────────────────────────
-            AspectRatio(
-              aspectRatio: _vm.videoReady
-                  ? _vm.videoController.value.aspectRatio
-                  : 16 / 9,
-              child: _vm.videoReady
-                  ? VideoPlayer(_vm.videoController)
-                  : const ColoredBox(
-                      color: Color(0xFF111111),
-                      child: Center(
-                        child: CircularProgressIndicator(
-                            color: Colors.deepPurpleAccent),
-                      ),
-                    ),
-            ),
+            // Bound height to 40 % of screen so the rest of the editor fits.
+            // Column gives AspectRatio unbounded height; on a 1366-wide screen
+            // 16:9 would demand 768 px, overflowing a 689 px available column.
+            Builder(builder: (ctx) {
+              final maxH =
+                  (MediaQuery.sizeOf(ctx).height * 0.40).clamp(160.0, 380.0);
+              return Container(
+                width: double.infinity,
+                height: maxH,
+                color: const Color(0xFF111111),
+                child: Center(
+                  child: AspectRatio(
+                    aspectRatio: _vm.videoReady
+                        ? _vm.videoController.value.aspectRatio
+                        : 16 / 9,
+                    child: _vm.videoReady
+                        ? VideoPlayer(_vm.videoController)
+                        : Center(
+                            child: switch (_vm.videoError) {
+                              null => const CircularProgressIndicator(
+                                  color: Colors.deepPurpleAccent),
+                              // Remux / encode in progress
+                              String e when e.startsWith('Preparing') ||
+                                      e.startsWith('Encoding') =>
+                                Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const CircularProgressIndicator(
+                                        color: Colors.deepPurpleAccent),
+                                    const SizedBox(height: 12),
+                                    Text(e,
+                                        style: const TextStyle(
+                                            color: Colors.white54,
+                                            fontSize: 11)),
+                                  ],
+                                ),
+                              // Permanent failure
+                              _ => Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.videocam_off,
+                                        color: Colors.white24, size: 32),
+                                    const SizedBox(height: 8),
+                                    const Text(
+                                      'Preview unavailable',
+                                      style: TextStyle(
+                                          color: Colors.white38, fontSize: 11),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ],
+                                ),
+                            },
+                          ),
+                  ),
+                ),
+              );
+            }),
 
             // ── Playback controls ───────────────────────────────────────────
             Padding(
@@ -410,7 +453,7 @@ class _EditorViewState extends State<EditorView> {
             backgroundColor: Colors.deepPurple,
             icon: const Icon(Icons.movie_filter),
             label: Text(
-                'Export $count clip${count == 1 ? '' : 's'}$filterLabel'),
+                'Render $count clip${count == 1 ? '' : 's'}$filterLabel'),
           );
         },
       ),
