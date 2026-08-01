@@ -76,8 +76,10 @@ class _HomeViewState extends State<HomeView> {
                 const Spacer(),
                 if (_vm.isPickingFile)
                   const Center(
-                      child: CircularProgressIndicator(
-                          color: Colors.deepPurpleAccent)),
+                    child: CircularProgressIndicator(
+                      color: Colors.deepPurpleAccent,
+                    ),
+                  ),
               ],
             ),
           ),

@@ -126,12 +126,13 @@ class HighlightDetector {
       final topQuotes  = HookDetector.extractQuotes(whisperSegs);
 
       yield AnalysisComplete(AnalysisResult(
-        segments:       segments,
-        transcript:     transcript,
-        videoDurationMs: videoDurationMs,
-        videoPath:      videoPath,
-        contentType:    contentType,
-        topQuotes:      topQuotes,
+        segments:         segments,
+        transcript:       transcript,
+        videoDurationMs:  videoDurationMs,
+        videoPath:        videoPath,
+        contentType:      contentType,
+        topQuotes:        topQuotes,
+        whisperSegments:  whisperSegs,
       ));
     } catch (e, st) {
       yield AnalysisError('$e\n$st');

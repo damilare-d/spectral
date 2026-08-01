@@ -1,3 +1,4 @@
+import '../ffi/whisper_ffi.dart';
 import 'content_type.dart';
 import 'quote.dart';
 import 'video_segment.dart';
@@ -9,6 +10,7 @@ class AnalysisResult {
   final String videoPath;
   final ContentType contentType;
   final List<Quote> topQuotes;
+  final List<WhisperSegment> whisperSegments;
 
   const AnalysisResult({
     required this.segments,
@@ -17,6 +19,7 @@ class AnalysisResult {
     required this.videoPath,
     this.contentType = ContentType.general,
     this.topQuotes = const [],
+    this.whisperSegments = const [],
   });
 
   /// All segments sorted by time — no cap, editor shows everything.
