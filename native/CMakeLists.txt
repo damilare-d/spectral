@@ -30,6 +30,7 @@ endif()
 # ── spectral_native shared library ────────────────────────────────────────────
 add_library(spectral_native SHARED
     spectral.c
+    analyzer.c
     ${kissfft_SOURCE_DIR}/kiss_fft.c
 )
 
