@@ -12,8 +12,8 @@ class AnalysisViewModel extends ChangeNotifier {
   AnalysisViewModel({
     required HighlightDetector detector,
     required WhisperModelService modelSvc,
-  })  : _detector = detector,
-        _modelSvc = modelSvc;
+  }) : _detector = detector,
+       _modelSvc = modelSvc;
 
   String _stageName = 'Initialising…';
   double _stageProgress = 0.0;
@@ -45,10 +45,12 @@ class AnalysisViewModel extends ChangeNotifier {
         _stageName = 'Downloading Whisper model (~75 MB)…';
         notifyListeners();
         try {
-          await _modelSvc.ensureModel(onProgress: (p) {
-            _downloadProgress = p;
-            notifyListeners();
-          });
+          await _modelSvc.ensureModel(
+            onProgress: (p) {
+              _downloadProgress = p;
+              notifyListeners();
+            },
+          );
         } catch (e) {
           _error = 'Model download failed: $e';
           notifyListeners();
@@ -60,28 +62,30 @@ class AnalysisViewModel extends ChangeNotifier {
     }
 
     _detector
-        .analyze(videoPath,
-            runSpeech: runSpeech,
-            contentTypeOverride: contentTypeOverride)
+        .analyze(
+          videoPath,
+          runSpeech: runSpeech,
+          contentTypeOverride: contentTypeOverride,
+        )
         .listen(
-      (event) {
-        switch (event) {
-          case AnalysisStage():
-            _stageName = event.label;
-            _stageProgress = event.fraction;
-            _stageIndex = event.stageIndex;
-            _totalStages = event.totalStages;
-          case AnalysisComplete():
-            _result = event.result;
-          case AnalysisError():
-            _error = event.message;
-        }
-        notifyListeners();
-      },
-      onError: (e) {
-        _error = e.toString();
-        notifyListeners();
-      },
-    );
+          (event) {
+            switch (event) {
+              case AnalysisStage():
+                _stageName = event.label;
+                _stageProgress = event.fraction;
+                _stageIndex = event.stageIndex;
+                _totalStages = event.totalStages;
+              case AnalysisComplete():
+                _result = event.result;
+              case AnalysisError():
+                _error = event.message;
+            }
+            notifyListeners();
+          },
+          onError: (e) {
+            _error = e.toString();
+            notifyListeners();
+          },
+        );
   }
 }

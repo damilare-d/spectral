@@ -94,127 +94,139 @@ class _AnalysisViewState extends State<AnalysisView> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const SizedBox(height: 32),
-        const Icon(Icons.movie_outlined,
-            color: Colors.deepPurpleAccent, size: 48),
-        const SizedBox(height: 20),
-        Text(
-          filename,
-          style: const TextStyle(color: Colors.white70, fontSize: 13),
-          textAlign: TextAlign.center,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-        ),
-        const SizedBox(height: 32),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1A1A2E),
-            borderRadius: BorderRadius.circular(12),
+          const Icon(
+            Icons.movie_outlined,
+            color: Colors.deepPurpleAccent,
+            size: 48,
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Analysis options',
+          const SizedBox(height: 20),
+          Text(
+            filename,
+            style: const TextStyle(color: Colors.white70, fontSize: 13),
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 32),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1A1A2E),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Analysis options',
                   style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600)),
-              const SizedBox(height: 12),
-              OptionRow(
-                icon: Icons.graphic_eq,
-                label: 'Audio energy & beats',
-                sublabel: 'Always included — fast',
-                value: true,
-                onChanged: null,
-              ),
-              OptionRow(
-                icon: Icons.camera_alt,
-                label: 'Scene changes',
-                sublabel: 'Always included — fast',
-                value: true,
-                onChanged: null,
-              ),
-              OptionRow(
-                icon: Icons.face,
-                label: 'Face & expression detection',
-                sublabel: 'Always included — fast',
-                value: true,
-                onChanged: null,
-              ),
-              const Divider(color: Colors.white12, height: 24),
-              OptionRow(
-                icon: Icons.mic,
-                label: 'Speech recognition (Whisper)',
-                sublabel: _runSpeech
-                    ? 'ON — takes 3–10× video length on device'
-                    : 'OFF — skip for screen recordings / no-speech videos',
-                value: _runSpeech,
-                onChanged: (v) => setState(() => _runSpeech = v),
-                warningColor: _runSpeech,
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1A1A2E),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Content type',
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600)),
-              const SizedBox(height: 4),
-              const Text(
-                'Auto-detect picks the best scoring weights for your video.',
-                style: TextStyle(color: Colors.white38, fontSize: 11),
-              ),
-              const SizedBox(height: 12),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    _TypeChip(
-                      label: 'Auto',
-                      selected: _contentTypeOverride == null,
-                      onTap: () =>
-                          setState(() => _contentTypeOverride = null),
-                    ),
-                    for (final ct in ContentType.values)
-                      _TypeChip(
-                        label: '${ct.icon} ${ct.label.split(' ').first}',
-                        selected: _contentTypeOverride == ct,
-                        onTap: () =>
-                            setState(() => _contentTypeOverride = ct),
-                      ),
-                  ],
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
+                const SizedBox(height: 12),
+                OptionRow(
+                  icon: Icons.graphic_eq,
+                  label: 'Audio energy & beats',
+                  sublabel: 'Always included — fast',
+                  value: true,
+                  onChanged: null,
+                ),
+                OptionRow(
+                  icon: Icons.camera_alt,
+                  label: 'Scene changes',
+                  sublabel: 'Always included — fast',
+                  value: true,
+                  onChanged: null,
+                ),
+                OptionRow(
+                  icon: Icons.face,
+                  label: 'Face & expression detection',
+                  sublabel: 'Always included — fast',
+                  value: true,
+                  onChanged: null,
+                ),
+                const Divider(color: Colors.white12, height: 24),
+                OptionRow(
+                  icon: Icons.mic,
+                  label: 'Speech recognition (Whisper)',
+                  sublabel: _runSpeech
+                      ? 'ON — takes 3–10× video length on device'
+                      : 'OFF — skip for screen recordings / no-speech videos',
+                  value: _runSpeech,
+                  onChanged: (v) => setState(() => _runSpeech = v),
+                  warningColor: _runSpeech,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1A1A2E),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Content type',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Auto-detect picks the best scoring weights for your video.',
+                  style: TextStyle(color: Colors.white38, fontSize: 11),
+                ),
+                const SizedBox(height: 12),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _TypeChip(
+                        label: 'Auto',
+                        selected: _contentTypeOverride == null,
+                        onTap: () =>
+                            setState(() => _contentTypeOverride = null),
+                      ),
+                      for (final ct in ContentType.values)
+                        _TypeChip(
+                          label: '${ct.icon} ${ct.label.split(' ').first}',
+                          selected: _contentTypeOverride == ct,
+                          onTap: () =>
+                              setState(() => _contentTypeOverride = ct),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 32),
+          ElevatedButton(
+            onPressed: _startAnalysis,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.deepPurple,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
               ),
-            ],
+            ),
+            child: const Text(
+              'Start Analysis',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
           ),
-        ),
-        const SizedBox(height: 32),
-        ElevatedButton(
-          onPressed: _startAnalysis,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.deepPurple,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10)),
-          ),
-          child: const Text('Start Analysis',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-        ),
-        const SizedBox(height: 32),
-      ],
-    ),
-  );
+          const SizedBox(height: 32),
+        ],
+      ),
+    );
   }
 
   Widget _buildProgress() {
@@ -223,8 +235,11 @@ class _AnalysisViewState extends State<AnalysisView> {
       mainAxisAlignment: MainAxisAlignment.center,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Icon(Icons.auto_awesome,
-            color: Colors.deepPurpleAccent, size: 48),
+        const Icon(
+          Icons.auto_awesome,
+          color: Colors.deepPurpleAccent,
+          size: 48,
+        ),
         const SizedBox(height: 32),
         Text(
           _vm.stageName,
@@ -258,8 +273,7 @@ class _AnalysisViewState extends State<AnalysisView> {
         if (stageHint != null) ...[
           const SizedBox(height: 20),
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
               color: Colors.white.withAlpha(10),
               borderRadius: BorderRadius.circular(8),
@@ -276,23 +290,46 @@ class _AnalysisViewState extends State<AnalysisView> {
   }
 
   Widget _buildError() {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        const Icon(Icons.error_outline, color: Colors.redAccent, size: 48),
-        const SizedBox(height: 16),
-        Text(
-          _vm.error!,
-          style: const TextStyle(color: Colors.white70, fontSize: 13),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 24),
-        ElevatedButton(
-          onPressed: () => context.pop(),
-          child: const Text('Go back'),
-        ),
-      ],
+    final raw = _vm.error ?? '';
+    final friendly = _friendlyError(raw);
+    return SingleChildScrollView(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.error_outline, color: Colors.redAccent, size: 48),
+          const SizedBox(height: 16),
+          Text(
+            friendly,
+            style: const TextStyle(color: Colors.white70, fontSize: 14),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          // Collapsible raw detail — hidden by default so it doesn't flood the screen
+          _ErrorDetail(raw),
+          const SizedBox(height: 24),
+          ElevatedButton(
+            onPressed: () => context.pop(),
+            child: const Text('Go back'),
+          ),
+        ],
+      ),
     );
+  }
+
+  static String _friendlyError(String raw) {
+    final tag = RegExp(r'\[(\w+)\]').firstMatch(raw)?.group(1);
+    return switch (tag) {
+      'extractAudio' =>
+        'Audio extraction failed.\n'
+            'Make sure the file is a supported video format and is not corrupted.',
+      'extractFrames' =>
+        'Frame extraction failed.\n'
+            'The video may be in an unsupported codec.',
+      'exportHighlights' || 'renderRaw' =>
+        'Export failed.\n'
+            'Check available storage space and try again.',
+      _ => 'Analysis failed.\nThe video could not be processed.',
+    };
   }
 
   String? _stageHint(int stageIndex, String stageName) {
@@ -341,12 +378,70 @@ class _TypeChip extends StatelessWidget {
             style: TextStyle(
               color: selected ? Colors.white : Colors.white54,
               fontSize: 12,
-              fontWeight:
-                  selected ? FontWeight.w600 : FontWeight.normal,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
             ),
           ),
         ),
       ),
+    );
+  }
+}
+
+class _ErrorDetail extends StatefulWidget {
+  final String raw;
+  const _ErrorDetail(this.raw);
+
+  @override
+  State<_ErrorDetail> createState() => _ErrorDetailState();
+}
+
+class _ErrorDetailState extends State<_ErrorDetail> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        GestureDetector(
+          onTap: () => setState(() => _expanded = !_expanded),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                _expanded ? Icons.expand_less : Icons.expand_more,
+                color: Colors.white24,
+                size: 16,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                _expanded ? 'Hide details' : 'Show details',
+                style: const TextStyle(color: Colors.white24, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+        if (_expanded)
+          Container(
+            margin: const EdgeInsets.only(top: 10),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.red.withAlpha(15),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.redAccent.withAlpha(40)),
+            ),
+            constraints: const BoxConstraints(maxHeight: 200),
+            child: SingleChildScrollView(
+              child: Text(
+                widget.raw,
+                style: const TextStyle(
+                  color: Colors.white38,
+                  fontSize: 10,
+                  fontFamily: 'monospace',
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
